@@ -4,7 +4,7 @@ A simple Go program that uses `feh --bg-fill` to set your wallpaper to the curre
 
 ## Building
 
-Have Go and feh installed, and run `make`.
+Have Go installed. Run `go mod tidy && go build`.
 
 ## Running
 

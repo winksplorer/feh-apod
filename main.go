@@ -6,11 +6,27 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path"
+	"path/filepath"
 
 	"github.com/PuerkitoBio/goquery"
 )
 
+// gets the cache directory
+func UserCacheDir() (string, error) {
+	// try env var first
+	if xdg := os.Getenv("XDG_CACHE_HOME"); xdg != "" {
+		return xdg, nil
+	}
+
+	// if it fails then assemble manually
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".cache"), nil
+}
+
+// gets the link for the latest APOD image
 func GetAPODImageHref() (string, error) {
 	// get the page
 	resp, err := http.Get("https://apod.nasa.gov/apod/astropix.html")
@@ -36,14 +52,16 @@ func GetAPODImageHref() (string, error) {
 		return "", fmt.Errorf("href not found")
 	}
 
+	fmt.Println("found image link:", href)
+
 	return href, nil
 }
 
-// DownloadImage downloads the image from APOD given a relative href.
-func DownloadImage(href string) error {
+// downloads a file over http, extracts it to userCacheDir().
+func DownloadFile(href string, path string) error {
 	// check if file already exists
-	if _, err := os.Stat(path.Base(href)); err == nil {
-		fmt.Println("already downloaded", path.Base(href))
+	if _, err := os.Stat(path); err == nil {
+		fmt.Println("already downloaded", path)
 		return nil
 	} else if !os.IsNotExist(err) {
 		return err // ????
@@ -57,7 +75,7 @@ func DownloadImage(href string) error {
 	defer resp.Body.Close()
 
 	// create file
-	out, err := os.Create(path.Base(href))
+	out, err := os.Create(path)
 	if err != nil {
 		return err
 	}
@@ -69,32 +87,42 @@ func DownloadImage(href string) error {
 		return err
 	}
 
-	fmt.Println("downloaded", path.Base(href))
+	fmt.Println("downloaded", path)
 	return nil
 }
 
-// SetWallpaper sets the desktop background using feh --bg-fill.
-func SetWallpaper(filepath string) error {
-	cmd := exec.Command("feh", "--bg-fill", filepath)
+// feh --bg-fill {filepath}
+func SetWallpaper(path string) error {
+	cmd := exec.Command("feh", "--bg-fill", path)
 	err := cmd.Run()
 	if err != nil {
 		return fmt.Errorf("failed to set wallpaper: %w", err)
 	}
+	fmt.Println("wallpaper set to", path)
 	return nil
 }
 
 func main() {
+	// get latest apod image link
 	href, err := GetAPODImageHref()
 	if err != nil {
 		panic(err)
 	}
 
-	if err := DownloadImage(href); err != nil {
+	// assembles filepath for the image
+	cacheDir, err := UserCacheDir()
+	if err != nil {
+		panic(err)
+	}
+	path := filepath.Join(cacheDir, filepath.Base(href))
+
+	// downloads the image
+	if err := DownloadFile(href, path); err != nil {
 		panic(err)
 	}
 
-	filename := path.Base(href)
-	if err := SetWallpaper(filename); err != nil {
+	// sets the downloaded image as the background
+	if err := SetWallpaper(path); err != nil {
 		panic(err)
 	}
 }
