@@ -11,25 +11,11 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// gets the cache directory
-func UserCacheDir() (string, error) {
-	// try env var first
-	if xdg := os.Getenv("XDG_CACHE_HOME"); xdg != "" {
-		return xdg, nil
-	}
-
-	// if it fails then assemble manually
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".cache"), nil
-}
-
-// gets the link for the latest APOD image
 func GetAPODImageHref() (string, error) {
+	baseURL := "https://apod.nasa.gov/apod/"
+
 	// get the page
-	resp, err := http.Get("https://apod.nasa.gov/apod/astropix.html")
+	resp, err := http.Get(baseURL + "astropix.html")
 	if err != nil {
 		return "", err
 	}
@@ -41,24 +27,49 @@ func GetAPODImageHref() (string, error) {
 		return "", err
 	}
 
-	// find image link element
-	selection := doc.Find("html > body > center").First().
+	// original <a href>
+	aHrefSel := doc.Find("html > body > center").First().
 		Find("p").Eq(1).
 		Find("a").First()
 
-	// get the link
-	href, exists := selection.Attr("href")
+	href, exists := aHrefSel.Attr("href")
 	if !exists {
 		return "", fmt.Errorf("href not found")
 	}
 
-	fmt.Println("found image link:", href)
+	// corresponding <img src>
+	imgSel := aHrefSel.Find("img").First()
+	src, srcExists := imgSel.Attr("src")
+	if !srcExists {
+		return baseURL + href, nil // fallback
+	}
 
-	return href, nil
+	// normalize URLs
+	hrefURL := ensureAbsoluteURL(baseURL, href)
+	srcURL := ensureAbsoluteURL(baseURL, src)
+
+	// size check
+	hrefSize, err := getContentLength(hrefURL)
+	if err != nil {
+		fmt.Println("warning: could not get size of href:", err)
+	}
+
+	srcSize, err := getContentLength(srcURL)
+	if err != nil {
+		fmt.Println("warning: could not get size of src:", err)
+	}
+
+	// choose the beefier image
+	if srcSize > hrefSize {
+		fmt.Printf("%s > %s\n", srcURL, hrefURL)
+		return srcURL, nil
+	}
+	fmt.Printf("%s < %s\n", srcURL, hrefURL)
+	return hrefURL, nil
 }
 
 // downloads a file over http, extracts it to userCacheDir().
-func DownloadFile(href string, path string) error {
+func DownloadFile(href, path string) error {
 	// check if file already exists
 	if _, err := os.Stat(path); err == nil {
 		fmt.Println("already downloaded", path)
@@ -68,7 +79,7 @@ func DownloadFile(href string, path string) error {
 	}
 
 	// get the page
-	resp, err := http.Get("https://apod.nasa.gov/apod/" + href)
+	resp, err := http.Get(href)
 	if err != nil {
 		return err
 	}
@@ -87,7 +98,7 @@ func DownloadFile(href string, path string) error {
 		return err
 	}
 
-	fmt.Println("downloaded", path)
+	fmt.Printf("downloaded %s to %s\n", href, path)
 	return nil
 }
 
