@@ -19,5 +19,5 @@ For the path, simply just specify the full path to the compiled binary.
 For example, I use this task on my personal system, to run `/home/wink/repos/feh-apod/feh-apod` at 21:20 PT.
 
 ```
-20 21 * * * /home/wink/repos/feh-apod/feh-apod
+20 21 * * * DISPLAY=:0 /home/wink/repos/feh-apod/feh-apod
 ```
